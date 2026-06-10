@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexum Flash Report</title>
+
+<!-- CDN dependencies (T001) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Karla:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+
+<style>
+/* ===== Theme (T002) — light "sand" palette, Inter + Karla ===== */
+:root{
+  /* Professional-services palette: navy + slate + restrained bronze,
+     on a light cool-gray background (mirrored 1:1 in the PPTX export). */
+  --sand:#F4F6F8; --sand2:#ECEFF3; --card:#FFFFFF; --card2:#F8FAFC;
+  --ink:#1E2A38; --muted:#5D6B7A; --amber:#1F4E79;
+  --green:#35795B; --red:#B5524A; --grey:#8A95A3;
+  --black:#16202C; --backlog:#44546A; --brown:#8FA1B3; --gap:#B5524A;
+  --line:#D9DEE5; --line2:#C3CBD5;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--sand); color:var(--ink);
+  font-family:"Inter",Helvetica,Arial,sans-serif; font-size:14px;
+}
+h1,h2,h3{margin:0; font-weight:700; font-family:"Karla","Inter",sans-serif}
+header.app{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 24px; background:linear-gradient(90deg,#F0F3F7,#E4E9F0);
+  border-bottom:2px solid var(--amber);
+}
+header.app .brand{display:flex; align-items:baseline; gap:12px}
+header.app .brand h1{font-size:24px; letter-spacing:.5px}
+header.app .brand .logo{color:var(--amber); font-weight:800; font-size:26px}
+header.app .brand .tag{color:var(--muted); font-size:12px}
+header.app .date{color:var(--muted); font-size:13px}
+
+/* Filter bar */
+.filterbar{
+  display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;
+  padding:16px 24px; background:var(--sand2); border-bottom:1px solid var(--line2);
+}
+.filterbar .fgroup{display:flex; flex-direction:column; gap:4px}
+.filterbar label{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px}
+.filterbar select, .filterbar input[type=file]{
+  background:var(--card2); color:var(--ink); border:1px solid var(--line2);
+  border-radius:6px; padding:7px 10px; font-size:13px; min-width:150px;
+}
+.filterbar .spacer{flex:1}
+button.action{
+  background:var(--amber); color:#fff; border:none; border-radius:6px;
+  padding:9px 18px; font-weight:700; cursor:pointer; font-size:13px;
+}
+button.action:hover{filter:brightness(1.08)}
+button.action:disabled{opacity:.55; cursor:default}
+button.ghost{
+  background:transparent; color:var(--muted); border:1px solid var(--line2);
+  border-radius:6px; padding:9px 14px; cursor:pointer; font-size:13px;
+}
+button.ghost:hover{color:var(--ink); border-color:var(--amber)}
+
+.fileload{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
+#status{font-size:12px; color:var(--muted)}
+
+/* Currency toggle */
+.curtoggle{display:flex; align-items:center; gap:8px}
+.curbtn{
+  background:var(--card2); color:var(--muted); border:1px solid var(--line2);
+  padding:7px 12px; font-size:13px; font-weight:600; cursor:pointer;
+}
+.curbtn:first-child{border-radius:6px 0 0 6px}
+.curbtn:nth-child(2){border-radius:0 6px 6px 0; border-left:none}
+.curbtn.active{background:var(--amber); color:#fff; border-color:var(--amber)}
+.xrnote{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums}
+
+main{padding:8px 24px 60px}
+.section{
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:18px 20px; margin:16px 0;
+}
+.section > h2{
+  font-size:16px; color:var(--ink); margin-bottom:14px;
+  border-left:3px solid var(--amber); padding-left:10px;
+}
+.subnote{color:var(--muted); font-size:11px; font-weight:400}
+
+/* Flash cards */
+.cards{display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:14px}
+.card{
+  position:relative; background:var(--card2); border-radius:10px;
+  padding:16px 18px 18px; border:1px solid var(--line);
+}
+.card.primary{background:linear-gradient(135deg,#FFFFFF,#EAF0F6); border-color:var(--amber)}
+.card .ctitle{font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.6px}
+.card .cval{font-size:30px; font-weight:700; margin-top:6px; line-height:1.1}
+.card.primary .cval{font-size:34px}
+.card .cyear{position:absolute; top:14px; right:16px; font-size:12px; color:var(--amber); font-weight:700}
+.deltas{position:absolute; right:16px; bottom:14px; text-align:right}
+.delta{font-size:12px; font-weight:600; line-height:1.45}
+.delta .lbl{color:var(--muted); font-weight:400; margin-right:6px; font-size:10px; text-transform:uppercase}
+.up{color:var(--green)} .down{color:var(--red)} .flat{color:var(--grey)}
+
+.chartwrap{position:relative; height:320px}
+.chartwrap.short{height:230px}
+.twocol{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+
+/* Performers */
+.perf{display:grid; grid-template-columns:repeat(3,1fr); gap:14px}
+.pcard{background:var(--card2); border-radius:10px; padding:16px; border:1px solid var(--line)}
+.pcard .rank{color:var(--amber); font-weight:800; font-size:13px}
+.pcard .pname{font-size:17px; font-weight:700; margin:4px 0 12px}
+.pcard .prow{display:flex; justify-content:space-between; padding:5px 0; border-top:1px solid var(--line); font-size:13px}
+.pcard .prow .k{color:var(--muted)}
+
+/* Tables */
+table{width:100%; border-collapse:collapse; font-size:13px}
+table caption{text-align:left; color:var(--amber); font-weight:700; padding:6px 0; font-size:13px}
+th,td{padding:7px 9px; text-align:left; border-bottom:1px solid var(--line)}
+th{color:var(--muted); font-weight:600; font-size:11px; text-transform:uppercase}
+td.num,th.num{text-align:right; font-variant-numeric:tabular-nums}
+tbody tr:hover{background:var(--sand2)}
+tfoot td{font-weight:700; border-top:2px solid var(--line2); border-bottom:none; color:var(--ink)}
+
+/* Overlay / placeholder */
+#overlay{
+  position:fixed; inset:0; background:rgba(30,42,56,.55); display:none;
+  align-items:center; justify-content:center; flex-direction:column; gap:16px; z-index:50;
+  color:#fff;
+}
+#overlay.show{display:flex}
+.spinner{width:46px; height:46px; border:5px solid #D9DEE5; border-top-color:var(--amber);
+  border-radius:50%; animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#placeholder{
+  text-align:center; color:var(--muted); padding:80px 20px;
+}
+#placeholder h2{color:var(--ink); margin-bottom:8px}
+#dashboard{display:none}
+#dashboard.ready{display:block}
+.legend{display:flex; gap:16px; flex-wrap:wrap; font-size:11px; color:var(--muted); margin-top:8px}
+.legend .sw{display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:5px; vertical-align:middle}
+.cur-note{color:var(--muted); font-size:10px; margin-left:6px}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="brand">
+    <span class="logo">◆ NEXUM</span>
+    <h1>Sales Flash Report</h1>
+    <span class="tag">Consulting Group · Europe</span>
+  </div>
+  <div class="date" id="hdrDate"></div>
+</header>
+
+<!-- Filter bar (T003, T024, T030) -->
+<div class="filterbar">
+  <div class="fileload">
+    <div class="fgroup">
+      <label>Budget CSV</label>
+      <input type="file" id="budgetFile" accept=".csv">
+    </div>
+    <div class="fgroup">
+      <label>Pipeline CSV</label>
+      <input type="file" id="pipelineFile" accept=".csv">
+    </div>
+  </div>
+
+  <div class="fgroup">
+    <label>Activity</label>
+    <select id="fActivity"><option>All</option></select>
+  </div>
+  <div class="fgroup">
+    <label>Business Unit</label>
+    <select id="fBU"><option>All</option></select>
+  </div>
+  <div class="fgroup">
+    <label>Geography</label>
+    <select id="fGeo"><option>All</option></select>
+  </div>
+  <div class="fgroup">
+    <label>Cutoff month</label>
+    <select id="fCutoff"></select>
+  </div>
+  <div class="fgroup">
+    <label>Currency</label>
+    <div class="curtoggle">
+      <button type="button" id="curEUR" class="curbtn active">EUR</button>
+      <button type="button" id="curGBP" class="curbtn">GBP</button>
+      <span class="xrnote">XR 0,87</span>
+    </div>
+  </div>
+
+  <div class="spacer"></div>
+  <span id="status">Load both CSV files to begin.</span>
+  <button class="ghost" id="resetBtn">Reset filters</button>
+  <button class="action" id="exportBtn" disabled>Export to PowerPoint</button>
+</div>
+
+<main>
+  <div id="placeholder">
+    <h2>Waiting for data</h2>
+    <p>Load <strong>input_budget.csv</strong> and <strong>input_pipeline.csv</strong> with the controls above.<br>
+    The dashboard shows once both files are in.</p>
+  </div>
+
+  <div id="dashboard">
+
+    <!-- YTD snapshot (T012) -->
+    <section class="section" id="ytd-snapshot">
+      <h2>YTD Snapshot <span class="subnote" id="ytdRange"></span></h2>
+      <div class="cards" id="ytdCards"></div>
+    </section>
+
+    <!-- Month snapshot (T012) -->
+    <section class="section" id="month-snapshot">
+      <h2>Month Snapshot <span class="subnote" id="monthRange"></span></h2>
+      <div class="cards" id="monthCards"></div>
+    </section>
+
+    <!-- Bar chart (T014) -->
+    <section class="section" id="bar-section">
+      <h2>Pipeline Coverage vs Budget <span class="subnote">(monthly gap to target, 2026)</span></h2>
+      <div class="chartwrap"><canvas id="barChart"></canvas></div>
+      <div class="legend">
+        <span><span class="sw" style="background:#35689B"></span>Signed</span>
+        <span><span class="sw" style="background:#44546A"></span>Backlog</span>
+        <span><span class="sw" style="background:#8FA1B3"></span>Pipeline (weighted)</span>
+        <span><span class="sw" style="background:#B5524A"></span>Gap to budget</span>
+        <span><span class="sw" style="background:#35795B"></span>Beat vs budget</span>
+        <span><span class="sw" style="border-top:2px dashed #1E2A38;width:14px;height:0"></span>Budget target</span>
+      </div>
+    </section>
+
+    <!-- New vs Existing business mix -->
+    <section class="section" id="newbiz-section">
+      <h2>New vs Existing Business <span class="subnote">(revenue mix: existing on the left, new business on the right)</span></h2>
+      <div class="chartwrap short"><canvas id="newbizChart"></canvas></div>
+      <div class="legend">
+        <span><span class="sw" style="background:#6B7785"></span>Existing Business</span>
+        <span><span class="sw" style="background:#A07E3B"></span>New Business</span>
+      </div>
+    </section>
+
+    <!-- Line chart (T017) -->
+    <section class="section" id="line-section">
+      <h2>Cumulative Revenue vs Target <span class="subnote">(2026, 2025, budget and gap)</span></h2>
+      <div class="chartwrap"><canvas id="lineChart"></canvas></div>
+    </section>
+
+    <!-- Performers (T021) -->
+    <section class="section" id="performers-section">
+      <h2>Top 3 Commercial Performers <span class="subnote">(signed YTD, change vs prior year, remaining to target)</span></h2>
+      <div class="perf" id="perfCards"></div>
+    </section>
+
+    <!-- Clients (T023) -->
+    <section class="section" id="clients-section">
+      <h2>Top 10 Clients <span class="subnote" id="clientsMonthLbl"></span></h2>
+      <div class="twocol">
+        <table id="clients2026"></table>
+        <table id="clients2025"></table>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<div id="overlay"><div class="spinner"></div><div id="overlayMsg">Working…</div></div>
+
+<script>
+/* =========================================================================
+   NEXUM FLASH REPORT — all application logic lives in this single file.
+   Sections:  // DATA  // FILTERS  // UI  // CHARTS  // EXPORT
+   ========================================================================= */
+
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const YEAR_CUR = 2026, YEAR_PY = 2025;
+const XR = 0.87;   // 1 EUR = 0.87 GBP
+
+const state = {
+  budget: null,      // RevenueRow[]
+  pipeline: null,    // RevenueRow[]
+  cutoff: 6,
+  activity: 'All', businessUnit: 'All', geography: 'All',
+  currency: 'EUR',   // display currency: 'EUR' or 'GBP'
+};
+
+// Convert a nominal amount from its source currency into the active display currency.
+function toCurrency(amount, from){
+  const src = /gbp/i.test(from||'') ? 'GBP' : 'EUR';
+  if(src===state.currency) return amount;
+  return state.currency==='GBP' ? amount*XR : amount/XR;
+}
+// Return rows with revenue + weightedRevenue restated in the active currency.
+function convertRows(rows){
+  return rows.map(r=>({...r,
+    revenue: toCurrency(r.revenue, r.currency),
+    weightedRevenue: toCurrency(r.weightedRevenue, r.currency)}));
+}
+let barChart=null, lineChart=null, newbizChart=null;
+
+/* ------------------------------- DATA ---------------------------------- */
+
+// T004 — parse a CSV File into normalised RevenueRow[]
+function parseCSV(file, source){
+  return new Promise((resolve,reject)=>{
+    Papa.parse(file,{
+      header:true, skipEmptyLines:true, dynamicTyping:false,
+      complete:(res)=>{
+        try{ resolve(res.data.map(r=>normalise(r,source)).filter(Boolean)); }
+        catch(e){ reject(e); }
+      },
+      error:reject
+    });
+  });
+}
+
+function num(v){ const n=parseFloat(String(v??'').replace(/[, ]/g,'')); return isNaN(n)?0:n; }
+
+// Parse a dd/mm/yyyy date string into {month, year}
+function parseDMY(s){
+  const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(s??'').trim());
+  return m ? {month:parseInt(m[2],10), year:parseInt(m[3],10)} : {month:NaN, year:NaN};
+}
+
+function normalise(r, source){
+  if(!r['Project ID']) return null;
+  const revenue = num(r['Revenue']);
+  const wp = num(r['Weighted Pipeline']);
+  // Revenue is recognised monthly: each row carries its recognition month in
+  // the Month/Year columns (a multi-month project has one row per month).
+  // Fall back to Start Date only if those columns are absent.
+  let month = parseInt(r['Month'], 10), year = parseInt(r['Year'], 10);
+  if(isNaN(month) || isNaN(year)){
+    ({month, year} = parseDMY(r['Start Date']));
+  }
+  const ne = (r['New/Existing']||'').trim();
+  return {
+    projectId:r['Project ID'], month, year,
+    client:r['Client'], businessUnit:r['Business Unit'], activity:r['Activity'],
+    entity:r['Entity'], geography:r['Geography'], lead:r['Commercial Lead'],
+    stage:r['Stage'], revenue, currency:r['Currency'],
+    newBiz: /new/i.test(ne),            // true = New Business, false = Existing
+    weightedRevenue: wp>0 ? wp : revenue,
+    source
+  };
+}
+
+// T006 — default cutoff = current reporting month (latest Won month already started)
+function detectCutoff(rows){
+  const now=new Date();
+  const curMonth = now.getFullYear()===YEAR_CUR ? now.getMonth()+1 : 12;
+  let m=1;
+  rows.forEach(r=>{ if(r.year===YEAR_CUR && r.stage==='Won' && r.month<=curMonth && r.month>m) m=r.month; });
+  return m || curMonth;
+}
+
+// T008 — filter a row set by the active dropdown selections
+function applyFilters(rows){
+  return rows.filter(r=>
+    (state.activity==='All'    || r.activity===state.activity) &&
+    (state.businessUnit==='All'|| r.businessUnit===state.businessUnit) &&
+    (state.geography==='All'   || r.geography===state.geography)
+  );
+}
+
+// T009 — KPI aggregates + 12-month series for a given year
+function computeKPIs(budgetRows, pipeRows, year, cutoff){
+  const won = pipeRows.filter(r=>r.year===year && r.stage==='Won');
+  const pend = pipeRows.filter(r=>r.year===year && r.stage==='Pending');
+  const bud = budgetRows.filter(r=>r.year===year);
+
+  const sum=(a,f)=>a.reduce((s,r)=>s+f(r),0);
+  const kpi={
+    signedYTD: sum(won.filter(r=>r.month<=cutoff), r=>r.revenue),
+    backlog:   sum(won.filter(r=>r.month>cutoff),  r=>r.revenue),
+    pipeline:  sum(pend, r=>r.weightedRevenue),
+    budgetYTD: sum(bud.filter(r=>r.month<=cutoff), r=>r.revenue),
+    budgetFY:  sum(bud, r=>r.revenue),
+    wonFY:     sum(won, r=>r.revenue),
+    signedMonth: sum(won.filter(r=>r.month===cutoff), r=>r.revenue),
+    budgetMonth: sum(bud.filter(r=>r.month===cutoff), r=>r.revenue),
+  };
+
+  const series=[];
+  for(let m=1;m<=12;m++){
+    series.push({
+      month:m,
+      signed:  sum(won.filter(r=>r.month===m && m<=cutoff), r=>r.revenue),
+      backlog: sum(won.filter(r=>r.month===m && m>cutoff),  r=>r.revenue),
+      won:     sum(won.filter(r=>r.month===m), r=>r.revenue),
+      pipeline:sum(pend.filter(r=>r.month===m), r=>r.weightedRevenue),
+      budget:  sum(bud.filter(r=>r.month===m),  r=>r.revenue),
+    });
+  }
+  return {kpi, series};
+}
+
+// T020 — top performers by commercial lead
+function computeTopPerformers(budgetRows, pipeRows, cutoff){
+  const leads={};
+  const ensure=l=>leads[l]||(leads[l]={lead:l, signedYTD:0, signedPY:0, wonFY:0, budgetFY:0});
+
+  pipeRows.forEach(r=>{
+    if(r.stage!=='Won') return;
+    if(r.year===YEAR_CUR){ ensure(r.lead).wonFY+=r.revenue; if(r.month<=cutoff) leads[r.lead].signedYTD+=r.revenue; }
+    if(r.year===YEAR_PY && r.month<=cutoff){ ensure(r.lead).signedPY+=r.revenue; }
+  });
+  budgetRows.forEach(r=>{ if(r.year===YEAR_CUR) ensure(r.lead).budgetFY+=r.revenue; });
+
+  return Object.values(leads).map(p=>{
+    const remaining=Math.max(p.budgetFY-p.wonFY,0);
+    return {...p,
+      vsPY:p.signedYTD-p.signedPY,
+      remaining,
+      remainingPct: p.budgetFY>0 ? remaining/p.budgetFY : 0
+    };
+  }).sort((a,b)=>b.signedYTD-a.signedYTD).slice(0,3);
+}
+
+// T022 — top clients for a given month/year (Won)
+function computeTopClients(pipeRows, month, year, n=10){
+  const map={};
+  pipeRows.filter(r=>r.stage==='Won' && r.year===year && r.month===month)
+    .forEach(r=>{
+      const k=r.client;
+      map[k]||(map[k]={client:r.client, activity:r.activity, revenue:0});
+      map[k].revenue+=r.revenue;
+    });
+  const all=Object.values(map);
+  const total=all.reduce((s,c)=>s+c.revenue,0);   // whole group for this month/year
+  return all.sort((a,b)=>b.revenue-a.revenue).slice(0,n)
+    .map((c,i)=>({rank:i+1, ...c, pct: total>0 ? c.revenue/total : 0}));
+}
+
+// New vs Existing revenue split for 2025 (Won), Budget, 2026 (Won)
+function computeNewExisting(budgetRows, pipeRows){
+  const split=rows=>{
+    let ex=0,nb=0;
+    rows.forEach(r=>{ if(r.newBiz) nb+=r.revenue; else ex+=r.revenue; });
+    return {ex, nb, total:ex+nb};
+  };
+  const won=y=>pipeRows.filter(r=>r.year===y && r.stage==='Won');
+  return {
+    y2025:  split(won(YEAR_PY)),
+    budget: split(budgetRows.filter(r=>r.year===YEAR_CUR)),
+    y2026:  split(won(YEAR_CUR)),
+  };
+}
+
+/* ------------------------------ FILTERS -------------------------------- */
+
+// T007 — build cascading filter options from the (unfiltered) row universe
+function buildFilterOptions(){
+  const all=[...state.budget, ...state.pipeline];
+
+  // Activity options (full universe)
+  const activities=[...new Set(all.map(r=>r.activity))].sort();
+  fillSelect('fActivity', ['All',...activities], state.activity);
+
+  // BU options cascade from selected activity
+  const buPool = all.filter(r=> state.activity==='All' || r.activity===state.activity);
+  const bus=[...new Set(buPool.map(r=>r.businessUnit))].sort();
+  if(state.businessUnit!=='All' && !bus.includes(state.businessUnit)) state.businessUnit='All';
+  fillSelect('fBU', ['All',...bus], state.businessUnit);
+
+  // Geography cascades from activity + BU
+  const geoPool = buPool.filter(r=> state.businessUnit==='All' || r.businessUnit===state.businessUnit);
+  const geos=[...new Set(geoPool.map(r=>r.geography))].sort();
+  if(state.geography!=='All' && !geos.includes(state.geography)) state.geography='All';
+  fillSelect('fGeo', ['All',...geos], state.geography);
+
+  // Cutoff month
+  fillSelect('fCutoff', Array.from({length:12},(_,i)=>i+1), state.cutoff,
+             v=>MONTHS[v-1]+' '+YEAR_CUR);
+}
+
+function fillSelect(id, values, selected, labelFn){
+  const el=document.getElementById(id);
+  el.innerHTML='';
+  values.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v; o.textContent=labelFn?labelFn(v):v;
+    if(String(v)===String(selected)) o.selected=true;
+    el.appendChild(o);
+  });
+}
+
+/* -------------------------------- UI ----------------------------------- */
+
+const fmt=n=>{
+  const sign=n<0?'-':''; const a=Math.abs(Math.round(n));
+  return sign+a.toLocaleString('en-US');
+};
+const fmtPct=p=>(p>=0?'+':'')+(p*100).toFixed(1)+'%';
+const fmtSigned=n=>(n>=0?'+':'-')+Math.abs(Math.round(n)).toLocaleString('en-US');
+
+function dirClass(diff){ return diff>0?'up':diff<0?'down':'flat'; }
+
+// T010/T011 — render one row of three flash cards
+function renderFlashCards(containerId, label, val26, valBud, val25){
+  const dBud=val26-valBud, dBudPct=valBud!==0?dBud/valBud:0;
+  const d25=val26-val25, d25Pct=val25!==0?d25/val25:0;
+  const c=document.getElementById(containerId);
+  c.innerHTML=`
+    <div class="card primary">
+      <div class="cyear">2026</div>
+      <div class="ctitle">${label} Signed</div>
+      <div class="cval">${fmt(val26)}<span class="cur-note">${state.currency}</span></div>
+      <div class="deltas">
+        <div class="delta ${dirClass(dBud)}"><span class="lbl">vs Bud</span>${fmtSigned(dBud)} <small>(${fmtPct(dBudPct)})</small></div>
+        <div class="delta ${dirClass(d25)}"><span class="lbl">vs 25</span>${fmtSigned(d25)} <small>(${fmtPct(d25Pct)})</small></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="cyear" style="color:var(--green)">BUD</div>
+      <div class="ctitle">${label} Budget</div>
+      <div class="cval">${fmt(valBud)}</div>
+    </div>
+    <div class="card">
+      <div class="cyear" style="color:var(--grey)">2025</div>
+      <div class="ctitle">${label} Prior Year</div>
+      <div class="cval">${fmt(val25)}</div>
+    </div>`;
+}
+
+// T021 — render performer cards
+function renderPerformers(top3){
+  const c=document.getElementById('perfCards');
+  c.innerHTML=top3.map((p,i)=>`
+    <div class="pcard">
+      <div class="rank">#${i+1}</div>
+      <div class="pname">${p.lead}</div>
+      <div class="prow"><span class="k">Signed YTD</span><span>${fmt(p.signedYTD)}</span></div>
+      <div class="prow"><span class="k">vs PY YTD</span><span class="${dirClass(p.vsPY)}">${fmtSigned(p.vsPY)}</span></div>
+      <div class="prow"><span class="k">Remaining to target</span><span>${fmt(p.remaining)}</span></div>
+      <div class="prow"><span class="k">% remaining</span><span class="${p.remainingPct>0?'down':'up'}">${(p.remainingPct*100).toFixed(1)}%</span></div>
+    </div>`).join('');
+}
+
+// T023 — render one client table
+function renderClientTable(id, caption, rows){
+  const t=document.getElementById(id);
+  const body = rows.length
+    ? rows.map(r=>`<tr><td>${r.rank}</td><td>${r.client}</td><td>${r.activity}</td><td class="num">${fmt(r.revenue)}</td><td class="num">${(r.pct*100).toFixed(1)}%</td></tr>`).join('')
+    : `<tr><td colspan="5" style="color:var(--muted)">No signed revenue this month.</td></tr>`;
+  const topRev=rows.reduce((s,r)=>s+r.revenue,0);
+  const topPct=rows.reduce((s,r)=>s+r.pct,0);
+  const foot = rows.length
+    ? `<tfoot><tr><td colspan="3">Top ${rows.length} concentration</td><td class="num">${fmt(topRev)}</td><td class="num">${(topPct*100).toFixed(1)}%</td></tr></tfoot>`
+    : '';
+  t.innerHTML=`<caption>${caption}</caption>
+    <thead><tr><th>#</th><th>Client</th><th>Activity</th><th class="num">Revenue</th><th class="num">% of group</th></tr></thead>
+    <tbody>${body}</tbody>${foot}`;
+}
+
+/* ------------------------------ CHARTS --------------------------------- */
+
+const GRID='#D9DEE5', TICK='#5D6B7A';
+
+// T015 — stacked bar: signed / backlog / pipeline / gap-or-beat vs budget
+function renderBarChart(series){
+  const labels=MONTHS;
+  const signed=series.map(s=>s.signed);
+  const backlog=series.map(s=>s.backlog);
+  const pipeline=series.map(s=>s.pipeline);
+  const budget=series.map(s=>s.budget);
+  const cover=series.map(s=>s.won+s.pipeline);
+  // Coverage segments are capped at budget; anything above budget is drawn as
+  // the green "beat" segment — so the dashed budget line sits exactly where
+  // the green starts. Under budget, the red gap fills up to the budget line.
+  const cSigned  =signed.map((v,i)=>Math.min(v, budget[i]));
+  const cBacklog =backlog.map((v,i)=>Math.min(v, Math.max(budget[i]-signed[i],0)));
+  const cPipeline=pipeline.map((v,i)=>Math.min(v, Math.max(budget[i]-signed[i]-backlog[i],0)));
+  const gap =series.map((s,i)=>Math.max(budget[i]-cover[i],0));
+  const beat=series.map((s,i)=>Math.max(cover[i]-budget[i],0));
+
+  if(barChart) barChart.destroy();
+  const opts=baseOpts(true);
+  // Tooltip matches the visual: coverage segments are read capped at budget,
+  // the green segment carries everything above it (skip empty segments).
+  opts.plugins.tooltip={callbacks:{label:c=>
+    c.parsed.y>0 ? c.dataset.label+': '+Math.round(c.parsed.y).toLocaleString('en-US') : null
+  }};
+  barChart=new Chart(document.getElementById('barChart'),{
+    type:'bar',
+    data:{labels, datasets:[
+      {label:'Signed',  data:cSigned,  backgroundColor:'#35689B', stack:'cov'},
+      {label:'Backlog', data:cBacklog, backgroundColor:'#44546A', stack:'cov'},
+      {label:'Pipeline',data:cPipeline,backgroundColor:'#8FA1B3', stack:'cov'},
+      {label:'Gap to budget',  data:gap,  backgroundColor:'rgba(181,82,74,0.85)', stack:'cov'},
+      {label:'Beat vs budget', data:beat, backgroundColor:'rgba(53,121,91,0.90)', stack:'cov'},
+    ]},
+    options:{...opts, plugins:{...opts.plugins, budgetMarker:{budgets:budget}}},
+    plugins:[budgetMarker]
+  });
+}
+
+// Always draw the budget target as a dashed marker + value on every bar,
+// so the budget level stays visible even when fully covered.
+const budgetMarker={
+  id:'budgetMarker',
+  afterDatasetsDraw(chart, args, opts){
+    const budgets=(opts&&opts.budgets)||[];
+    const {ctx, scales:{y}}=chart;
+    const meta=chart.getDatasetMeta(0);   // first stacked dataset = bar geometry
+    ctx.save();
+    meta.data.forEach((bar,i)=>{
+      const b=budgets[i]; if(!b) return;
+      const yy=y.getPixelForValue(b);
+      const half=(bar.width/2)+2;
+      ctx.strokeStyle='#1E2A38'; ctx.lineWidth=2; ctx.setLineDash([5,3]);
+      ctx.beginPath(); ctx.moveTo(bar.x-half, yy); ctx.lineTo(bar.x+half, yy); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font='600 9px Inter, sans-serif'; ctx.fillStyle='#1E2A38';
+      ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText((b/1000).toFixed(0)+'k', bar.x, yy-2);
+    });
+    ctx.restore();
+  }
+};
+
+// Horizontal 100% stacked bars — Existing (left) vs New Business (right)
+// Rows top→bottom: 2025, Budget, 2026
+function renderNewbizChart(mix){
+  const rows=[
+    {label:'2025',   d:mix.y2025},
+    {label:'Budget', d:mix.budget},
+    {label:'2026',   d:mix.y2026},
+  ];
+  const pct=(part,tot)=>tot>0?(part/tot)*100:0;
+  const exPct=rows.map(r=>pct(r.d.ex, r.d.total));
+  const nbPct=rows.map(r=>pct(r.d.nb, r.d.total));
+  const exAbs=rows.map(r=>r.d.ex), nbAbs=rows.map(r=>r.d.nb);
+
+  if(newbizChart) newbizChart.destroy();
+  newbizChart=new Chart(document.getElementById('newbizChart'),{
+    type:'bar',
+    data:{labels:rows.map(r=>r.label), datasets:[
+      {label:'Existing Business', data:exPct, _abs:exAbs, backgroundColor:'#6B7785', stack:'mix', borderRadius:2},
+      {label:'New Business',      data:nbPct, _abs:nbAbs, backgroundColor:'#A07E3B', stack:'mix', borderRadius:2},
+    ]},
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{label:c=>{
+          const abs=c.dataset._abs[c.dataIndex];
+          return `${c.dataset.label}: ${c.parsed.x.toFixed(1)}% (${Math.round(abs).toLocaleString('en-US')})`;
+        }}},
+        datalabels:false
+      },
+      scales:{
+        x:{stacked:true, min:0, max:100, grid:{display:false}, border:{display:false},
+           ticks:{display:false}},
+        y:{stacked:true, grid:{display:false}, ticks:{color:TICK, font:{size:13,weight:'600'}}}
+      }
+    },
+    plugins:[newbizLabels]
+  });
+}
+
+// Inline plugin: draw percentage labels centered in each segment
+const newbizLabels={
+  id:'newbizLabels',
+  afterDatasetsDraw(chart){
+    const {ctx}=chart;
+    ctx.save();
+    ctx.font='600 12px Inter, sans-serif';
+    ctx.textAlign='center';
+    chart.data.datasets.forEach((ds,di)=>{
+      const meta=chart.getDatasetMeta(di);
+      meta.data.forEach((bar,i)=>{
+        const v=ds.data[i];
+        const p=bar.getProps(['x','base','y','height'], true);
+        const segW=Math.abs(p.x-p.base);
+        const txt=v.toFixed(0)+'%';
+        const txtW=ctx.measureText(txt).width;
+        // centre of the segment, clamped so the text never leaves the canvas
+        const {left, right}=chart.chartArea;
+        const cx=Math.min(Math.max((p.x+p.base)/2, left+txtW/2+2), right-txtW/2-2);
+        if(segW >= txtW+8){                       // fits inside the segment
+          ctx.fillStyle='#ffffff';
+          ctx.textBaseline='middle';
+          ctx.fillText(txt, cx, p.y);
+        }else{                                    // too small: drop under the bar
+          ctx.fillStyle='#1E2A38';
+          ctx.textBaseline='top';
+          ctx.fillText(txt, cx, p.y + p.height/2 + 5);
+        }
+      });
+    });
+    ctx.restore();
+  }
+};
+
+// T018 — cumulative line chart with red gap area
+function renderLineChart(s26, s25, budSeries){
+  const cum=arr=>{let t=0;return arr.map(v=>t+=v);};
+  const c26=cum(s26.map(s=>s.won));
+  const c25=cum(s25.map(s=>s.won));
+  const cBud=cum(budSeries.map(s=>s.budget));
+  // Gap to target = Budget − (Signed + Backlog) only. Pipeline is excluded.
+  const cRev=cum(s26.map(s=>s.signed+s.backlog));
+  const cGap=cBud.map((b,i)=>Math.max(b-cRev[i],0));
+
+  if(lineChart) lineChart.destroy();
+  lineChart=new Chart(document.getElementById('lineChart'),{
+    type:'line',
+    data:{labels:MONTHS, datasets:[
+      {label:'2026 actual', data:c26, borderColor:'#35689B', backgroundColor:'#35689B', tension:.25, pointRadius:2},
+      {label:'Budget',      data:cBud, borderColor:'#35795B', backgroundColor:'#35795B', tension:.25, pointRadius:2},
+      {label:'2025 actual', data:c25, borderColor:'#8A95A3', backgroundColor:'#8A95A3', borderDash:[2,2], tension:.25, pointRadius:0},
+      {label:'Gap to target', data:cGap, borderColor:'#B5524A', backgroundColor:'rgba(181,82,74,0.15)',
+       borderDash:[6,3], fill:'origin', tension:.25, pointRadius:0},
+    ]},
+    options:baseOpts(false)
+  });
+}
+
+function baseOpts(stacked){
+  return {
+    responsive:true, maintainAspectRatio:false,
+    animation:false,
+    plugins:{
+      legend:{labels:{color:TICK, boxWidth:12, font:{size:11}}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+Math.round(c.parsed.y).toLocaleString('en-US')}}
+    },
+    scales:{
+      x:{stacked, grid:{display:false}, border:{color:GRID}, ticks:{color:TICK}},
+      y:{stacked, grid:{display:false}, border:{color:GRID}, ticks:{color:TICK, callback:v=>(v/1000)+'k'}, beginAtZero:true}
+    }
+  };
+}
+
+/* ------------------------------- RENDER -------------------------------- */
+
+function render(){
+  if(!state.budget || !state.pipeline) return;
+  const fb=convertRows(applyFilters(state.budget)), fp=convertRows(applyFilters(state.pipeline));
+  const cut=state.cutoff;
+
+  const cur=computeKPIs(fb,fp,YEAR_CUR,cut);
+  const py =computeKPIs(fb,fp,YEAR_PY,cut);
+
+  // KPI cards (T013)
+  document.getElementById('ytdRange').textContent=`(Jan to ${MONTHS[cut-1]} ${YEAR_CUR})`;
+  document.getElementById('monthRange').textContent=`(${MONTHS[cut-1]} ${YEAR_CUR})`;
+  renderFlashCards('ytdCards','YTD', cur.kpi.signedYTD, cur.kpi.budgetYTD, py.kpi.signedYTD);
+  renderFlashCards('monthCards','Month', cur.kpi.signedMonth, cur.kpi.budgetMonth, py.kpi.signedMonth);
+
+  // Charts (T016, T019)
+  renderBarChart(cur.series);
+  renderNewbizChart(computeNewExisting(fb,fp));
+  renderLineChart(cur.series, py.series, cur.series);
+
+  // Performers
+  renderPerformers(computeTopPerformers(fb,fp,cut));
+
+  // Clients (T023)
+  document.getElementById('clientsMonthLbl').textContent=`(${MONTHS[cut-1]} ${YEAR_CUR} vs ${YEAR_PY})`;
+  renderClientTable('clients2026', `${MONTHS[cut-1]} ${YEAR_CUR}`, computeTopClients(fp,cut,YEAR_CUR));
+  renderClientTable('clients2025', `${MONTHS[cut-1]} ${YEAR_PY}`, computeTopClients(fp,cut,YEAR_PY));
+}
+
+/* ------------------------------- WIRING -------------------------------- */
+
+function showOverlay(msg){document.getElementById('overlayMsg').textContent=msg||'Working…';document.getElementById('overlay').classList.add('show');}
+function hideOverlay(){document.getElementById('overlay').classList.remove('show');}
+
+// T005 — both files loaded → ready
+function maybeReady(){
+  const ready = state.budget && state.pipeline;
+  document.getElementById('exportBtn').disabled = !ready;
+  if(ready){
+    state.cutoff=detectCutoff(state.pipeline);
+    buildFilterOptions();
+    document.getElementById('placeholder').style.display='none';
+    document.getElementById('dashboard').classList.add('ready');
+    document.getElementById('status').textContent=
+      `Loaded · cutoff ${MONTHS[state.cutoff-1]} ${YEAR_CUR}`;
+    render();
+  }
+}
+
+async function onFile(inputId, source){
+  const f=document.getElementById(inputId).files[0];
+  if(!f) return;
+  showOverlay('Parsing '+f.name+'…');
+  try{
+    const rows=await parseCSV(f, source);
+    state[source]=rows;
+    document.getElementById('status').textContent=`${source}: ${rows.length} rows loaded`;
+    maybeReady();
+  }catch(e){
+    alert('Failed to parse '+f.name+': '+e.message);
+  }finally{ hideOverlay(); }
+}
+
+// Auto-load attempt (works when served over http; harmless over file://)
+async function tryAutoload(){
+  for(const [file,source] of [['input_budget.csv','budget'],['input_pipeline.csv','pipeline']]){
+    try{
+      const res=await fetch(file);
+      if(!res.ok) continue;
+      const text=await res.text();
+      const parsed=Papa.parse(text,{header:true,skipEmptyLines:true});
+      state[source]=parsed.data.map(r=>normalise(r,source)).filter(Boolean);
+    }catch(e){/* file:// blocks fetch — fall back to manual load */}
+  }
+  maybeReady();
+}
+
+function onFilterChange(){
+  state.activity   = document.getElementById('fActivity').value;
+  state.businessUnit = document.getElementById('fBU').value;
+  state.geography  = document.getElementById('fGeo').value;
+  state.cutoff     = parseInt(document.getElementById('fCutoff').value,10)||state.cutoff;
+  buildFilterOptions();   // re-cascade BU/Geo
+  render();
+}
+
+document.getElementById('budgetFile').addEventListener('change',()=>onFile('budgetFile','budget'));
+document.getElementById('pipelineFile').addEventListener('change',()=>onFile('pipelineFile','pipeline'));
+['fActivity','fBU','fGeo','fCutoff'].forEach(id=>
+  document.getElementById(id).addEventListener('change',onFilterChange));
+
+// T030 — reset filters
+document.getElementById('resetBtn').addEventListener('click',()=>{
+  state.activity='All'; state.businessUnit='All'; state.geography='All';
+  if(state.pipeline) state.cutoff=detectCutoff(state.pipeline);
+  buildFilterOptions(); render();
+});
+
+// Currency toggle
+function setCurrency(cur){
+  state.currency=cur;
+  document.getElementById('curEUR').classList.toggle('active', cur==='EUR');
+  document.getElementById('curGBP').classList.toggle('active', cur==='GBP');
+  if(state.budget && state.pipeline) render();
+}
+document.getElementById('curEUR').addEventListener('click',()=>setCurrency('EUR'));
+document.getElementById('curGBP').addEventListener('click',()=>setCurrency('GBP'));
+
+document.getElementById('exportBtn').addEventListener('click',exportToPPTX);
+
+// Header date
+document.getElementById('hdrDate').textContent =
+  new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'long',year:'numeric'});
+
+/* ------------------------------- EXPORT -------------------------------- */
+
+// T025 — capture a DOM section as a PNG dataURL
+async function captureSection(id){
+  const el=document.getElementById(id);
+  // Fill the capture canvas with the page/slide background colour so the
+  // PNG blends seamlessly into the PPTX slide (same hex as s.background).
+  const canvas=await html2canvas(el,{backgroundColor:'#F4F6F8', scale:2, logging:false});
+  return {dataUrl:canvas.toDataURL('image/png'), ratio:canvas.height/canvas.width};
+}
+
+function filterSummary(){
+  return [
+    `Activity: ${state.activity}`,
+    `Business Unit: ${state.businessUnit}`,
+    `Geography: ${state.geography}`,
+    `Cutoff: ${MONTHS[state.cutoff-1]} ${YEAR_CUR}`,
+  ];
+}
+
+// T026 — slide builders
+function addCoverSlide(pptx){
+  const s=pptx.addSlide(); s.background={color:'F4F6F8'};
+  s.addText('◆ NEXUM', {x:0.5,y:1.6,w:9,h:0.8,fontSize:44,bold:true,color:'1F4E79',fontFace:'Karla'});
+  s.addText('Sales Flash Report', {x:0.5,y:2.5,w:9,h:0.6,fontSize:30,color:'1E2A38',fontFace:'Karla'});
+  s.addText(`Board Review · ${MONTHS[state.cutoff-1]} ${YEAR_CUR}`,
+            {x:0.5,y:3.2,w:9,h:0.4,fontSize:16,color:'5D6B7A',fontFace:'Inter'});
+  s.addText(filterSummary().join('     |     '),
+            {x:0.5,y:4.6,w:9,h:0.4,fontSize:12,color:'5D6B7A',fontFace:'Inter'});
+  s.addText('Confidential. Internal management reporting.',
+            {x:0.5,y:6.7,w:9,h:0.3,fontSize:10,italic:true,color:'8A95A3',fontFace:'Inter'});
+}
+
+function addDataSlide(pptx, title, cap){
+  const s=pptx.addSlide(); s.background={color:'F4F6F8'};
+  s.addText(title,{x:0.4,y:0.25,w:9.2,h:0.5,fontSize:20,bold:true,color:'1E2A38',fontFace:'Karla'});
+  s.addShape(pptx.ShapeType.line,{x:0.4,y:0.8,w:9.2,h:0,line:{color:'1F4E79',width:2}});
+  // image area
+  const maxW=9.2, maxH=4.2, x=0.4, y=1.0;
+  let w=maxW, h=w*cap.ratio;
+  if(h>maxH){ h=maxH; w=h/cap.ratio; }
+  s.addImage({data:cap.dataUrl, x:x+(maxW-w)/2, y, w, h});
+  // comment box (T026)
+  s.addShape(pptx.ShapeType.rect,{x:0.4,y:5.45,w:9.2,h:1.7,fill:{color:'FFFFFF'},line:{color:'C3CBD5',width:1}});
+  s.addText('Controller notes:',{x:0.55,y:5.55,w:9,h:0.3,fontSize:12,bold:true,color:'1F4E79',fontFace:'Karla'});
+  s.addText('',{x:0.55,y:5.9,w:8.9,h:1.15,fontSize:12,color:'1E2A38',fontFace:'Inter'});
+}
+
+// T027/T028 — full export
+async function exportToPPTX(){
+  const btn=document.getElementById('exportBtn');
+  btn.disabled=true; const orig=btn.textContent; btn.textContent='Exporting…';
+  showOverlay('Building PowerPoint…');
+  try{
+    const pptx=new PptxGenJS();
+    pptx.defineLayout({name:'NEXUM',width:10,height:7.5});
+    pptx.layout='NEXUM';
+
+    addCoverSlide(pptx);
+
+    const slides=[
+      ['ytd-snapshot',       'YTD Snapshot'],
+      ['month-snapshot',     'Month Snapshot'],
+      ['bar-section',        'Pipeline Coverage vs Budget'],
+      ['newbiz-section',     'New vs Existing Business'],
+      ['line-section',       'Cumulative Revenue vs Target'],
+      ['performers-section', 'Top 3 Commercial Performers'],
+      ['clients-section',    'Top 10 Clients by Month'],
+    ];
+    for(const [id,title] of slides){
+      showOverlay('Capturing: '+title);
+      const cap=await captureSection(id);
+      addDataSlide(pptx,title,cap);
+    }
+
+    const fname=`Nexum_Flash_Report_${YEAR_CUR}-${String(state.cutoff).padStart(2,'0')}.pptx`;
+    await pptx.writeFile({fileName:fname});
+  }catch(e){
+    alert('Export failed: '+e.message);
+  }finally{
+    hideOverlay(); btn.disabled=false; btn.textContent=orig;
+  }
+}
+
+/* ------------------------------- INIT ---------------------------------- */
+tryAutoload();
+</script>
+</body>
+</html>
