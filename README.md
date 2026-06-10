@@ -6,7 +6,7 @@ Sin servidor, sin instalación, sin base de datos. Se abre en el navegador y fun
 
 ## Probarlo
 
-**Demo en vivo:** _(pendiente: enlace de GitHub Pages)_
+**Demo en vivo:** https://gegagr.github.io/nexum-flash-report/
 
 Carga sola los datos de ejemplo. Puedes cambiar filtros, mes de corte y moneda (EUR/GBP), y exportar el PowerPoint.
 
